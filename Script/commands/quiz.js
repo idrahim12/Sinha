@@ -1,125 +1,115 @@
 const axios = require("axios");
 
-process.env.NODE_TLS_REJECT_UNAUTHORIZED = "0";
-
-const CONFIG_URL = "https://raw.githubusercontent.com/shahadat-sahu/SAHU-API/refs/heads/main/SAHU-API.json";
-
 module.exports.config = {
   name: "quiz",
-  version: "1.0.0",
+  version: "2.3.2",
   hasPermssion: 0,
-  credits: "SHAHADAT SAHU",
-  description: "Quiz with 30s timer",
+  credits: "MAHBUBU ULLASH × RUBISH API",
+  description: "Bangla Quiz with Coins System (Free to Play)",
+  usePrefix: false,
   commandCategory: "Game",
-  usages: "quiz",
-  cooldowns: 0,
-  usePrefix: true
+  usages: "quiz [h]",
+  cooldowns: 5,
+  dependencies: { "axios": "" }
 };
 
-const TIME_LIMIT = 30000;
-let QUIZ_API = null;
+const timeoutDuration = 20 * 1000;
 
-async function loadQuizAPI() {
-  try {
-    if (QUIZ_API) return QUIZ_API;
-    const res = await axios.get(CONFIG_URL);
-    QUIZ_API = res.data.quize.replace(/\/$/, "");
-    return QUIZ_API;
-  } catch {
-    return null;
-  }
-}
-
-module.exports.run = async function ({ api, event }) {
+module.exports.run = async function ({ api, event, args }) {
   const { threadID, messageID } = event;
-  if (!global.client.handleReply) global.client.handleReply = [];
+
+  if (args[0]?.toLowerCase() === "h") {
+    return api.sendMessage(
+      `🧠 Quiz Guide:\n\n` +
+      `➤ Command: quiz\n` +
+      `➤ Correct Answer: +500 Coins\n` +
+      `➤ Wrong Answer: No Coins deducted ❌\n` +
+      `➤ You can play even with 0 Coins 🎉\n` +
+      `➤ 20 seconds to answer\n\n` +
+      `⚡ Good Luck!`, threadID, messageID
+    );
+  }
 
   try {
-    const quizAPI = await loadQuizAPI();
-    if (!quizAPI) return api.sendMessage("Quiz API error call boss SAHU✔️", threadID, messageID);
-
-    const res = await axios.get(quizAPI + "/quiz");
+    const res = await axios.get(`https://rubish-apihub.onrender.com/rubish/quiz-api?category=Bangla&apikey=rubish69`);
     const data = res.data;
 
-    if (!data || !data.question) {
-      return api.sendMessage("❌ No quiz available", threadID, messageID);
-    }
+    if (!data.question || !data.answer) throw new Error("Invalid quiz data");
 
-    const msg =
-      `🎮 𝗚𝗮𝗺𝗲 𝗤𝘂𝗶𝘇 𝗦𝘁𝗮𝗿𝘁𝗲𝗱\n` +
-      `━━━━━━━━━━━━━━━━━━\n` +
-      `🔻 ${data.question}\n\n` +
-      `A › ${data.A}\n` +
-      `B › ${data.B}\n` +
-      `C › ${data.C}\n` +
-      `D › ${data.D}\n\n` +
-      `⏰ 30s • Reply: A/B/C/D`;
+    const formatted =
+`╭──✦ ${data.question}
+├‣ 𝗔) ${data.A}
+├‣ 𝗕) ${data.B}
+├‣ 𝗖) ${data.C}
+├‣ 𝗗) ${data.D}
+╰──────────────────‣
+Reply with your answer (A/B/C/D). ⏰ 20s`;
 
-    api.sendMessage(msg, threadID, (err, info) => {
-      if (err) return;
+    return api.sendMessage(formatted, threadID, async (err, info) => {
+      if (err) return console.error("Send error:", err);
 
       const timeout = setTimeout(async () => {
-        const i = global.client.handleReply.findIndex(e => e.messageID === info.messageID);
-        if (i === -1) return;
-
-        const hr = global.client.handleReply[i];
-
-        if (!hr.answered) {
-          const result = await axios.post(quizAPI + "/quiz/answer", {
-            sessionID: hr.sessionID,
-            answer: ""
-          });
-
-          api.sendMessage(`⏰ Time Up!\nCorrect Answer: ${result.data.answer}`, threadID);
+        const index = global.client.handleReply.findIndex(e => e.messageID === info.messageID);
+        if (index !== -1) {
+          try {
+            await api.unsendMessage(info.messageID);
+            api.sendMessage(`⏰ Time's up!\n✅ The correct answer was: ${data.answer}`, threadID);
+          } catch (e) {
+            console.error("Timeout unsend error:", e);
+          }
+          global.client.handleReply.splice(index, 1);
         }
-
-        await api.unsendMessage(info.messageID);
-        global.client.handleReply.splice(i, 1);
-      }, TIME_LIMIT);
+      }, timeoutDuration);
 
       global.client.handleReply.push({
-        name: module.exports.config.name,
+        name: this.config.name,
         messageID: info.messageID,
-        sessionID: data.sessionID,
-        timeout,
-        answered: false
+        author: event.senderID,
+        answer: data.answer,
+        timeout
       });
-    }, messageID);
+    });
 
-  } catch {
-    api.sendMessage("Quiz API error call boss SAHU✔", threadID, messageID);
+  } catch (err) {
+    console.error("API fetch error:", err);
+    return api.sendMessage("❌ Failed to load quiz data!", threadID, messageID);
   }
 };
 
-module.exports.handleReply = async function ({ api, event, handleReply }) {
-  const { threadID, body, messageID } = event;
+module.exports.handleReply = async function ({ api, event, handleReply, Currencies }) {
+  const { senderID, messageID, threadID, body } = event;
+  const { increaseMoney } = Currencies;
 
-  const ans = body.trim().toUpperCase();
-  if (!["A", "B", "C", "D"].includes(ans)) return;
+  if (senderID !== handleReply.author) return;
 
-  handleReply.answered = true;
+  const userAnswer = body.trim().toUpperCase();
+  if (!["A", "B", "C", "D"].includes(userAnswer)) {
+    return api.sendMessage("⚠️ Please enter a valid option: A, B, C or D", threadID, messageID);
+  }
+
   clearTimeout(handleReply.timeout);
 
   try {
-    const quizAPI = await loadQuizAPI();
-
-    const res = await axios.post(quizAPI + "/quiz/answer", {
-      sessionID: handleReply.sessionID,
-      answer: ans
-    });
-
-    if (res.data.correct === true) {
-      api.sendMessage(`✅ Correct! (${res.data.answer})`, threadID, messageID);
+    if (userAnswer === handleReply.answer) {
+      await api.unsendMessage(handleReply.messageID);
+      await increaseMoney(senderID, 500);
+      const total = (await Currencies.getData(senderID)).money;
+      return api.sendMessage(
+        `✅ Correct!\n💰 You've earned 500 Coins\n🏦 Balance: ${total} Coins`,
+        threadID,
+        messageID
+      );
     } else {
-      api.sendMessage(`❌ Wrong!\nCorrect: ${res.data.answer}`, threadID, messageID);
+      return api.sendMessage(
+        `❌ Wrong answer!\n✅ Correct answer: ${handleReply.answer}\n⚡ No Coins deducted`,
+        threadID,
+        messageID
+      );
     }
-
-    await api.unsendMessage(handleReply.messageID);
-
-  } catch {
-    api.sendMessage("❌ Failed to check answer", threadID, messageID);
+  } catch (e) {
+    console.error("Handle reply error:", e);
   }
 
-  const i = global.client.handleReply.findIndex(e => e.messageID === handleReply.messageID);
-  if (i !== -1) global.client.handleReply.splice(i, 1);
+  const index = global.client.handleReply.findIndex(e => e.messageID === handleReply.messageID);
+  if (index !== -1) global.client.handleReply.splice(index, 1);
 };
