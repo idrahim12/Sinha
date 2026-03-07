@@ -12,12 +12,20 @@ module.exports.config = {
   cooldowns: 0
 };
 
+const allowedUID = "61574007381785";
+
 const lang = {
-  returnCant: "কি unsent করমু? reply করে বলো সুনা 🫰",
-  missingReply: "কি unsent করমু? reply করে বলো সুনা 🫰"
+  returnCant: "কি unsent করতে হবে? reply করে বলো 🫰",
+  missingReply: "কি unsent করমু? reply করে বলো 🫰",
+  noPermission: "এই কমান্ড টা শুধু ইয়াকুব স্যার ব্যবহার করতে পারবে, তুমি ইয়াকুব স্যারের কাছে পারমিশন নেও"
 };
 
 module.exports.run = async function ({ api, event }) {
+
+  if (event.senderID !== allowedUID) {
+    return api.sendMessage(lang.noPermission, event.threadID, event.messageID);
+  }
+
   if (event.type !== "message_reply")
     return api.sendMessage(lang.missingReply, event.threadID, event.messageID);
 
@@ -48,6 +56,11 @@ module.exports.handleEvent = async function ({ api, event }) {
     );
 
     if (isTriggered) {
+
+      if (event.senderID !== allowedUID) {
+        return api.sendMessage(lang.noPermission, event.threadID, event.messageID);
+      }
+
       if (event.type !== "message_reply")
         return api.sendMessage(lang.missingReply, event.threadID, event.messageID);
 
